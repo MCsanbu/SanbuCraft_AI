@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SANBUCRAFT_BUILD_TESTS "Build SanbuCraft AI tests" ON)
+option(SANBUCRAFT_BUILD_GUI "Build the Qt desktop dashboard when Qt 6 is available" ON)
 
 find_package(ZLIB REQUIRED)
 find_package(SQLite3 REQUIRED)
@@ -37,6 +38,25 @@ endif()
 
 add_executable(sanbucraft_ai src/main.cpp)
 target_link_libraries(sanbucraft_ai PRIVATE sanbucraft_core)
+
+if(SANBUCRAFT_BUILD_GUI)
+    find_package(Qt6 COMPONENTS Widgets QUIET)
+    if(Qt6Widgets_FOUND)
+        qt_standard_project_setup()
+        add_library(sanbucraft_gui
+            src/gui/MainWindow.cpp
+            src/gui/MainWindow.h
+            src/gui/MapView.cpp
+            src/gui/MapView.h
+        )
+        target_link_libraries(sanbucraft_gui PUBLIC sanbucraft_core Qt6::Widgets)
+        target_include_directories(sanbucraft_gui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+        target_compile_definitions(sanbucraft_ai PRIVATE SANBUCRAFT_WITH_QT_GUI=1)
+        target_link_libraries(sanbucraft_ai PRIVATE sanbucraft_gui)
+    else()
+        message(STATUS "Qt 6 Widgets not found: building the headless executable only")
+    endif()
+endif()
 
 include(CTest)
 if(BUILD_TESTING AND SANBUCRAFT_BUILD_TESTS)

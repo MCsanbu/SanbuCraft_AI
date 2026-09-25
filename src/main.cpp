@@ -10,12 +10,17 @@
 #include <iostream>
 #include <vector>
 
+#ifdef SANBUCRAFT_WITH_QT_GUI
+#include "gui/MainWindow.h"
+#include <QApplication>
+#endif
+
 namespace {
 
 void printUsage() {
     std::cout << "SanbuCraft AI (Phase 1)\n"
               << "Usage: sanbucraft_ai [--config <path>] [--world <minecraft-world-path>]\n"
-              << "                     [--log-level debug|info|warning|error] [--help]\n";
+              << "                     [--log-level debug|info|warning|error] [--headless] [--help]\n";
 }
 
 bool parseLogLevel(const std::string& text, sanbucraft::core::LogLevel& level) {
@@ -37,6 +42,7 @@ int main(int argc, char* argv[]) {
     fs::path configPath = "data/sanbucraft.conf";
     fs::path suppliedWorldPath;
     LogLevel logLevel = LogLevel::Info;
+    bool headless = false;
 
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
@@ -47,6 +53,7 @@ int main(int argc, char* argv[]) {
         }
         if (argument == "--config") configPath = argv[++index];
         else if (argument == "--world") suppliedWorldPath = argv[++index];
+        else if (argument == "--headless") headless = true;
         else if (argument == "--log-level" && !parseLogLevel(argv[++index], logLevel)) {
             std::cerr << "Invalid log level. Use debug, info, warning, or error.\n";
             return 2;
@@ -95,6 +102,16 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         logger.info("World analyzed: " + world.name + ", players=" + std::to_string(players.size()) + ", containers=" + std::to_string(analysis.containers));
+#ifdef SANBUCRAFT_WITH_QT_GUI
+        if (!headless) {
+            QApplication application(argc, argv);
+            sanbucraft::gui::MainWindow window(world, players, containers);
+            window.show();
+            return application.exec();
+        }
+#else
+        (void)headless;
+#endif
     }
 
     std::cout << "========================================\n"

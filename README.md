@@ -47,7 +47,7 @@ resources/ data/ docs/
 
 - CMake 3.20+
 - 支持 C++17 的编译器：MSVC 2022、GCC 9+ 或 Clang 10+
-- 当前 Phase 1 **没有第三方运行时依赖**。后续将按阶段引入 zlib（NBT 压缩）、SQLite3、Qt 6 与可选 HTTP/RCON 依赖。
+- zlib（NBT 压缩）与 SQLite3 是当前必需依赖。Qt 6 Widgets 是可选依赖：检测到后会构建桌面 Dashboard；未检测到时仍可构建完整的无界面分析器。
 
 ## 构建与运行
 
@@ -73,6 +73,18 @@ ctest --test-dir build --output-on-failure
 ./build/sanbucraft_ai --world "$HOME/.minecraft/saves/Survival_01"
 ```
 
+## Phase 9–10：地图与桌面界面
+
+若 CMake 检测到 Qt 6 Widgets，运行带 `--world` 的程序会打开只读桌面 Dashboard：概览页显示世界、玩家、容器和物资统计，**World Map** 页显示玩家（蓝色）与容器（橙色）标记。地图可使用鼠标滚轮缩放、拖动平移，并通过悬停查看坐标。使用 `--headless` 可强制不启动 GUI，方便服务器、CI 或脚本环境。
+
+在 Windows 上可通过 vcpkg 安装 GUI 依赖：
+
+```powershell
+vcpkg install qtbase:x64-windows
+cmake -S . -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="<vcpkg>\scripts\buildsystems\vcpkg.cmake"
+cmake --build build --config Debug
+```
+
 ## 配置与安全
 
 `data/sanbucraft.conf` 当前支持世界路径、未来数据库路径、日志路径、AI provider/model 及 RCON 地址/端口。密钥与密码不会被配置接口写出，未来会接入系统凭据存储或运行时环境变量。配置解析拒绝未知键和无效端口，避免静默拼写错误。
@@ -84,7 +96,7 @@ ctest --test-dir build --output-on-failure
 ## 开发路线
 
 1. **已完成：Phase 1–8 基础实现** — 骨架、NBT、世界/玩家/背包、Anvil 容器、SQLite schema 与资源分析。
-2. Phase 9–10 — 地图与 Qt Dashboard。
+2. **已完成：Phase 9–10 基础实现** — 可缩放/平移的 Chunk 坐标地图和可选 Qt Dashboard。
 3. Phase 11–18 — 可替换 AI、上下文、工具调用、安全实时连接、确认式自动化、优化与打包。
 
 ## 常见问题
