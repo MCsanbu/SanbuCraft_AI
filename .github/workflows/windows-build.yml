@@ -1,0 +1,72 @@
+name: Windows Portable Build
+
+on:
+  push:
+    branches:
+      - main
+      - feature/windows-portable-exe
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install aqtinstall
+          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O "$env:GITHUB_WORKSPACE\Qt"
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          $qt = "$env:GITHUB_WORKSPACE\Qt\6.8.3\msvc2022_64"
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$qt" -DSANBUCRAFT_BUILD_TESTS=ON -DSANBUCRAFT_BUILD_GUI=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Deploy Qt
+        shell: pwsh
+        run: |
+          $qtBin = "$env:GITHUB_WORKSPACE\Qt\6.8.3\msvc2022_64\bin"
+          & "$qtBin\windeployqt.exe" --release --no-translations "$env:GITHUB_WORKSPACE\build\Release\sanbucraft_ai.exe"
+
+      - name: Prepare portable package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\data | Out-Null
+          Copy-Item build\Release\sanbucraft_ai.exe dist\
+          Copy-Item README.md dist\
+          Copy-Item LICENSE dist\
+          Set-Content -Path dist\README_FIRST.txt -Value @'
+SanbuCraft AI - Windows Portable
+
+Double-click sanbucraft_ai.exe to start.
+The program will open the Minecraft saves folder first. Select a specific world folder containing level.dat.
+
+The application reads the Minecraft world in read-only mode and does not modify the save.
+
+Command line:
+  sanbucraft_ai.exe --world "C:\path\to\world"
+  sanbucraft_ai.exe --headless --world "C:\path\to\world"
+'@
+
+      - name: Archive
+        shell: pwsh
+        run: Compress-Archive -Path dist\* -DestinationPath SanbuCraft-AI-Windows-x64.zip -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SanbuCraft-AI-Windows-x64
+          path: SanbuCraft-AI-Windows-x64.zip
+          if-no-files-found: error
