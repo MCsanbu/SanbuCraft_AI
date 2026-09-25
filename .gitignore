@@ -1,0 +1,11 @@
+# Build output and local runtime state
+/build/
+/out/
+/data/*.db
+/data/*.log
+/data/sanbucraft.conf
+
+# IDE and local secrets
+.vscode/
+.idea/
+.env
