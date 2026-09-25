@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - feature/windows-portable-exe
+    paths-ignore:
+      - builds/windows-x64/**
   workflow_dispatch:
 
 permissions:
@@ -12,7 +14,6 @@ permissions:
 
 jobs:
   build-windows:
-    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: update Windows binary')
     runs-on: windows-2022
 
     steps:
@@ -21,19 +22,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Configure vcpkg
+      - name: Configure vcpkg dependencies
         shell: pwsh
         run: |
-          Write-Host "VCPKG_INSTALLATION_ROOT=$env:VCPKG_INSTALLATION_ROOT"
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install qtbase:x64-windows zlib:x64-windows sqlite3:x64-windows
 
       - name: Configure CMake
         shell: pwsh
-        run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
-            -DSANBUCRAFT_BUILD_TESTS=ON `
-            -DSANBUCRAFT_BUILD_GUI=ON
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" -DSANBUCRAFT_BUILD_TESTS=ON -DSANBUCRAFT_BUILD_GUI=ON
 
       - name: Build Release
         run: cmake --build build --config Release --parallel
@@ -44,16 +40,34 @@ jobs:
       - name: Deploy Qt runtime
         shell: pwsh
         run: |
-          $windeploy = Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\tools" -Recurse -Filter windeployqt.exe |
-            Select-Object -First 1
+          $windeploy = Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\tools" -Recurse -Filter windeployqt.exe | Select-Object -First 1
           if ($null -eq $windeploy) {
             throw "windeployqt.exe was not found in the vcpkg Qt installation."
           }
-          New-Item -ItemType Directory -Force -Path dist\data | Out-Null
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item build\Release\sanbucraft_ai.exe dist\
           & $windeploy.FullName --release --no-translations dist\sanbucraft_ai.exe
 
-      - name: Copy runtime documentation
+      - name: Prepare repository binary
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path builds\windows-x64 | Out-Null
+          Copy-Item build\Release\sanbucraft_ai.exe builds\windows-x64\sanbucraft_ai.exe
+
+      - name: Commit executable to repository
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add builds/windows-x64/sanbucraft_ai.exe
+          if (-not (git diff --cached --quiet)) {
+            git commit -m "chore: update Windows binary"
+            git push
+          } else {
+            Write-Host "Executable is unchanged."
+          }
+
+      - name: Create portable ZIP
         shell: pwsh
         run: |
           Copy-Item README.md dist\
@@ -61,33 +75,14 @@ jobs:
           @'
 SanbuCraft AI - Windows x64
 
-Double-click sanbucraft_ai.exe.
+Double-click sanbucraft_ai.exe to start.
+Select a Minecraft Java world folder containing level.dat.
 
-The program opens the Minecraft Java saves directory and lets you select a world folder containing level.dat.
-
-The application reads Minecraft save data in read-only mode.
+The portable ZIP includes the required Qt runtime files.
 '@ | Set-Content dist\README_FIRST.txt -Encoding UTF8
+          Compress-Archive -Path dist\* -DestinationPath SanbuCraft-AI-Windows-x64.zip -Force
 
-      - name: Commit Windows executable bundle
-        shell: pwsh
-        run: |
-          if (git status --porcelain) {
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            New-Item -ItemType Directory -Force -Path builds\windows-x64 | Out-Null
-            Copy-Item dist\* builds\windows-x64\ -Recurse -Force
-            git add builds\windows-x64
-            git commit -m "chore: update Windows binary"
-            git push
-          } else {
-            Write-Host "No bundle changes to commit."
-          }
-
-      - name: Create ZIP
-        shell: pwsh
-        run: Compress-Archive -Path dist\* -DestinationPath SanbuCraft-AI-Windows-x64.zip -Force
-
-      - name: Upload artifact
+      - name: Upload portable ZIP
         uses: actions/upload-artifact@v4
         with:
           name: SanbuCraft-AI-Windows-x64
