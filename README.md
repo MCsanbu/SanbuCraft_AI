@@ -1,6 +1,7 @@
 # SanbuCraft AI
 
-> 一个面向 Minecraft Java Edition 世界存档的可扩展 AI 世界管家。当前仓库提供 Phase 1–8 的后端基础：配置、NBT、世界/玩家读取、容器扫描、SQLite 持久化和资源统计；不会修改 Minecraft 世界。
+> 一个面向 Minecraft Java Edition 世界存档的可扩展 AI 世界管家。当前仓库提供：配置、NBT、世界/玩家读取、容器扫描、SQLite 持久化和资源统计；不会修改 Minecraft 世界。
+> Made By GPT-5.6-Luna 
 
 ## 当前功能
 
