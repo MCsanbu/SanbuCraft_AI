@@ -15,16 +15,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check runner
+      - name: Install dependencies
         shell: pwsh
         run: |
-          Write-Host "Windows runner OK"
-          cmake --version
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install zlib:x64-windows sqlite3:x64-windows
 
       - name: Configure
         shell: pwsh
         run: |
-          cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSANBUCRAFT_BUILD_TESTS=ON -DSANBUCRAFT_BUILD_GUI=OFF
+          cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" -DSANBUCRAFT_BUILD_TESTS=ON -DSANBUCRAFT_BUILD_GUI=OFF
 
       - name: Build
         run: cmake --build build --config Release --parallel
