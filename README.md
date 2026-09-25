@@ -1,6 +1,6 @@
 # SanbuCraft AI
 
-> 一个面向 Minecraft Java Edition 世界存档的可扩展 AI 世界管家。当前仓库实现 **Phase 1：项目骨架、配置与日志**；尚未读取或修改 Minecraft 世界。
+> 一个面向 Minecraft Java Edition 世界存档的可扩展 AI 世界管家。当前仓库提供 Phase 1–8 的后端基础：配置、NBT、世界/玩家读取、容器扫描、SQLite 持久化和资源统计；不会修改 Minecraft 世界。
 
 ## 当前功能
 
@@ -9,6 +9,8 @@
 - 可持久化的本地 `key=value` 配置文件；配置中**不保存** API Key 或 RCON 密码。
 - 最小可运行命令行入口，可接受 Minecraft 世界路径，为后续 `WorldLoader` 保留稳定输入。
 - CTest 覆盖配置读写/非法键与日志等级过滤。
+- NBT reader/writer 支持 Java Edition 常用 tag、Big Endian、gzip/zlib 和未压缩载荷；WorldLoader 读取 `level.dat`，PlayerLoader 读取 `playerdata/*.dat`。
+- Anvil `.mca` 容器扫描支持主世界、下界和末地的 chest、barrel、shulker box、ender chest；扫描结果可进入 SQLite schema（worlds、players、items、containers、container_items、chunks、structures、analysis_results）。
 
 ## 最终技术架构
 
@@ -77,15 +79,13 @@ ctest --test-dir build --output-on-failure
 
 ## Minecraft 兼容性
 
-Phase 1 尚未解析存档，因此不宣称具体版本兼容性。Phase 2/3 将针对 Java Edition 的 gzip/zlib NBT 与 Anvil region 格式建立兼容性测试矩阵。
+面向 Java Edition 的 gzip/zlib NBT、`level.dat`、`playerdata/*.dat` 与 Anvil `.mca`。已实现的容器解析覆盖常见的 `block_entities` 和旧版 `Level.TileEntities` 布局；其他自定义维度、模组容器和跨版本数据变化将继续补充兼容性测试。
 
 ## 开发路线
 
-1. **已完成：Phase 1** — 骨架、CMake、Logger、Config、可运行入口与测试。
-2. Phase 2 — NBT reader/writer（全部常用 tag、gzip/zlib、大小端）与测试夹具。
-3. Phase 3–8 — 世界、玩家、背包、容器、SQLite 与世界分析。
-4. Phase 9–10 — 地图与 Qt Dashboard。
-5. Phase 11–18 — 可替换 AI、上下文、工具调用、安全实时连接、确认式自动化、优化与打包。
+1. **已完成：Phase 1–8 基础实现** — 骨架、NBT、世界/玩家/背包、Anvil 容器、SQLite schema 与资源分析。
+2. Phase 9–10 — 地图与 Qt Dashboard。
+3. Phase 11–18 — 可替换 AI、上下文、工具调用、安全实时连接、确认式自动化、优化与打包。
 
 ## 常见问题
 

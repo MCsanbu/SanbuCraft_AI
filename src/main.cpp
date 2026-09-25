@@ -1,8 +1,14 @@
 #include "core/Config.h"
 #include "core/Logger.h"
+#include "minecraft/WorldLoader.h"
+#include "minecraft/PlayerLoader.h"
+#include "minecraft/ContainerScanner.h"
+#include "analysis/WorldAnalyzer.h"
+#include "database/Database.h"
 
 #include <filesystem>
 #include <iostream>
+#include <vector>
 
 namespace {
 
@@ -69,6 +75,27 @@ int main(int argc, char* argv[]) {
         std::cerr << "Logger warning: " << error << "\n";
     }
     logger.info("Starting SanbuCraft AI Phase 1.");
+
+    if (!config.minecraftWorldPath.empty()) {
+        sanbucraft::minecraft::WorldInfo world;
+        std::vector<sanbucraft::minecraft::Player> players;
+        std::vector<sanbucraft::minecraft::Container> containers;
+        if (!sanbucraft::minecraft::WorldLoader::loadWorld(config.minecraftWorldPath.string(), world, error) ||
+            !sanbucraft::minecraft::PlayerLoader::loadPlayers(config.minecraftWorldPath.string(), players, error) ||
+            !sanbucraft::minecraft::ContainerScanner::scan(config.minecraftWorldPath.string(), containers, error)) {
+            logger.error(error);
+            std::cerr << "World analysis error: " << error << "\n";
+            return 1;
+        }
+        const auto analysis = sanbucraft::analysis::WorldAnalyzer::analyze(players, containers);
+        sanbucraft::database::Database database;
+        if (!database.open(config.databasePath.string(), error) || !database.replaceWorldData(world, players, containers, error)) {
+            logger.error(error);
+            std::cerr << "Database error: " << error << "\n";
+            return 1;
+        }
+        logger.info("World analyzed: " + world.name + ", players=" + std::to_string(players.size()) + ", containers=" + std::to_string(analysis.containers));
+    }
 
     std::cout << "========================================\n"
               << "          SanbuCraft AI | Phase 1\n"

@@ -8,9 +8,18 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SANBUCRAFT_BUILD_TESTS "Build SanbuCraft AI tests" ON)
 
+find_package(ZLIB REQUIRED)
+find_package(SQLite3 REQUIRED)
+
 add_library(sanbucraft_core
     src/core/Config.cpp
     src/core/Logger.cpp
+    src/minecraft/Nbt.cpp
+    src/minecraft/WorldLoader.cpp
+    src/minecraft/PlayerLoader.cpp
+    src/minecraft/ContainerScanner.cpp
+    src/database/Database.cpp
+    src/analysis/WorldAnalyzer.cpp
 )
 
 target_include_directories(sanbucraft_core PUBLIC
@@ -18,6 +27,7 @@ target_include_directories(sanbucraft_core PUBLIC
 )
 
 target_compile_features(sanbucraft_core PUBLIC cxx_std_17)
+target_link_libraries(sanbucraft_core PUBLIC ZLIB::ZLIB SQLite::SQLite3)
 
 if(MSVC)
     target_compile_options(sanbucraft_core PRIVATE /W4 /permissive-)
@@ -37,4 +47,12 @@ if(BUILD_TESTING AND SANBUCRAFT_BUILD_TESTS)
     add_executable(logger_tests tests/LoggerTests.cpp)
     target_link_libraries(logger_tests PRIVATE sanbucraft_core)
     add_test(NAME logger_tests COMMAND logger_tests)
+
+    add_executable(nbt_tests tests/NbtTests.cpp)
+    target_link_libraries(nbt_tests PRIVATE sanbucraft_core)
+    add_test(NAME nbt_tests COMMAND nbt_tests)
+
+    add_executable(analysis_tests tests/AnalysisTests.cpp)
+    target_link_libraries(analysis_tests PRIVATE sanbucraft_core)
+    add_test(NAME analysis_tests COMMAND analysis_tests)
 endif()
