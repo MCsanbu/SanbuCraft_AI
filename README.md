@@ -85,9 +85,23 @@ cmake -S . -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="<vcpkg>\scripts\buildsystems\
 cmake --build build --config Debug
 ```
 
+## Phase 11–16：AI、工具与安全执行边界
+
+当前实现提供可替换的 `AIProvider` 接口、默认离线 `MockAIProvider`、`WorldContext` 以及 `Agent`。Agent 会把真实的世界、玩家、物资与容器数据组合成上下文；对于钻石、铁、金、煤、绿宝石和面包等查询，会直接从已扫描的数据中回答数量和容器坐标。可以在无 GUI 环境中使用：
+
+```bash
+./build/sanbucraft_ai --world "$HOME/.minecraft/saves/Survival_01" --ask "我的钻石在哪里？" --headless
+```
+
+涉及整理、放置、建造、删除或执行的请求只会生成“需要确认”的提议，绝不会发送 Minecraft 命令。`MinecraftConnection` 抽象和 `RconConnection` 已预留，但 RCON 网络传输在密钥安全存储、认证和超时策略完成前保持禁用，避免意外执行操作。
+
 ## 配置与安全
 
 `data/sanbucraft.conf` 当前支持世界路径、未来数据库路径、日志路径、AI provider/model 及 RCON 地址/端口。密钥与密码不会被配置接口写出，未来会接入系统凭据存储或运行时环境变量。配置解析拒绝未知键和无效端口，避免静默拼写错误。
+
+## 打包
+
+Release 构建可通过 CPack 生成与平台对应的 ZIP 和 TGZ 包；详细命令、发布门槛及不包含敏感运行时文件的说明见 [`docs/release.md`](docs/release.md)。
 
 ## Minecraft 兼容性
 
@@ -97,7 +111,8 @@ cmake --build build --config Debug
 
 1. **已完成：Phase 1–8 基础实现** — 骨架、NBT、世界/玩家/背包、Anvil 容器、SQLite schema 与资源分析。
 2. **已完成：Phase 9–10 基础实现** — 可缩放/平移的 Chunk 坐标地图和可选 Qt Dashboard。
-3. Phase 11–18 — 可替换 AI、上下文、工具调用、安全实时连接、确认式自动化、优化与打包。
+3. **已完成：Phase 11–16 安全基础** — 可替换 AI 接口、真实世界上下文、只读查询 Agent、确认式危险操作提案和禁用状态的 RCON 边界。
+4. Phase 17–18 — 经确认的自动化操作、真实 RCON/Fabric 传输、端到端真实世界兼容性夹具、性能优化与打包。
 
 ## 常见问题
 

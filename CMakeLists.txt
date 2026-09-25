@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 project(SanbuCraftAI VERSION 0.1.0 LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -21,6 +23,11 @@ add_library(sanbucraft_core
     src/minecraft/ContainerScanner.cpp
     src/database/Database.cpp
     src/analysis/WorldAnalyzer.cpp
+    src/ai/WorldContext.cpp
+    src/ai/MockAIProvider.cpp
+    src/ai/Agent.cpp
+    src/agent/ActionExecutor.cpp
+    src/network/RconConnection.cpp
 )
 
 target_include_directories(sanbucraft_core PUBLIC
@@ -38,6 +45,11 @@ endif()
 
 add_executable(sanbucraft_ai src/main.cpp)
 target_link_libraries(sanbucraft_ai PRIVATE sanbucraft_core)
+
+install(TARGETS sanbucraft_ai
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(FILES README.md LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/sanbucraft-ai)
 
 if(SANBUCRAFT_BUILD_GUI)
     find_package(Qt6 COMPONENTS Widgets QUIET)
@@ -75,4 +87,19 @@ if(BUILD_TESTING AND SANBUCRAFT_BUILD_TESTS)
     add_executable(analysis_tests tests/AnalysisTests.cpp)
     target_link_libraries(analysis_tests PRIVATE sanbucraft_core)
     add_test(NAME analysis_tests COMMAND analysis_tests)
+
+    add_executable(agent_tests tests/AgentTests.cpp)
+    target_link_libraries(agent_tests PRIVATE sanbucraft_core)
+    add_test(NAME agent_tests COMMAND agent_tests)
+
+    add_executable(action_executor_tests tests/ActionExecutorTests.cpp)
+    target_link_libraries(action_executor_tests PRIVATE sanbucraft_core)
+    add_test(NAME action_executor_tests COMMAND action_executor_tests)
 endif()
+
+set(CPACK_PACKAGE_NAME "SanbuCraft-AI")
+set(CPACK_PACKAGE_VENDOR "SanbuCraft AI contributors")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Read-only Minecraft Java Edition world analysis assistant")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_GENERATOR "ZIP;TGZ")
+include(CPack)

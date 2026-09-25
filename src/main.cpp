@@ -5,6 +5,8 @@
 #include "minecraft/ContainerScanner.h"
 #include "analysis/WorldAnalyzer.h"
 #include "database/Database.h"
+#include "ai/Agent.h"
+#include "ai/MockAIProvider.h"
 
 #include <filesystem>
 #include <iostream>
@@ -20,7 +22,7 @@ namespace {
 void printUsage() {
     std::cout << "SanbuCraft AI (Phase 1)\n"
               << "Usage: sanbucraft_ai [--config <path>] [--world <minecraft-world-path>]\n"
-              << "                     [--log-level debug|info|warning|error] [--headless] [--help]\n";
+              << "                     [--ask <question>] [--log-level debug|info|warning|error] [--headless] [--help]\n";
 }
 
 bool parseLogLevel(const std::string& text, sanbucraft::core::LogLevel& level) {
@@ -43,16 +45,18 @@ int main(int argc, char* argv[]) {
     fs::path suppliedWorldPath;
     LogLevel logLevel = LogLevel::Info;
     bool headless = false;
+    std::string question;
 
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
         if (argument == "--help") { printUsage(); return 0; }
-        if ((argument == "--config" || argument == "--world" || argument == "--log-level") && index + 1 >= argc) {
+        if ((argument == "--config" || argument == "--world" || argument == "--ask" || argument == "--log-level") && index + 1 >= argc) {
             std::cerr << "Missing value for " << argument << ".\n";
             return 2;
         }
         if (argument == "--config") configPath = argv[++index];
         else if (argument == "--world") suppliedWorldPath = argv[++index];
+        else if (argument == "--ask") question = argv[++index];
         else if (argument == "--headless") headless = true;
         else if (argument == "--log-level" && !parseLogLevel(argv[++index], logLevel)) {
             std::cerr << "Invalid log level. Use debug, info, warning, or error.\n";
@@ -102,6 +106,14 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         logger.info("World analyzed: " + world.name + ", players=" + std::to_string(players.size()) + ", containers=" + std::to_string(analysis.containers));
+        if (!question.empty()) {
+            sanbucraft::ai::MockAIProvider provider;
+            sanbucraft::ai::Agent agent(provider);
+            const auto reply = agent.ask(sanbucraft::ai::buildWorldContext(world, players, containers), question);
+            std::cout << "AI Assistant (" << provider.name() << "):\n" << reply.answer << "\n";
+            if (reply.requiresConfirmation) std::cout << "Confirmation required: " << reply.proposedAction << "\n";
+            return 0;
+        }
 #ifdef SANBUCRAFT_WITH_QT_GUI
         if (!headless) {
             QApplication application(argc, argv);
