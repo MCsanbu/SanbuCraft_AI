@@ -1,0 +1,3 @@
+#include "minecraft/Nbt.h"
+#include <iostream>
+int main() { using namespace sanbucraft::minecraft; NbtTag root; root.type = TagType::Compound; NbtTag name{TagType::String, std::string("Survival_01")}; NbtTag time{TagType::Long, static_cast<std::int64_t>(42)}; root.value = NbtTag::Compound{{"LevelName", name}, {"Time", time}}; std::vector<std::uint8_t> data; std::string error; NbtTag read; if (!NbtWriter::write(root, data, error) || !NbtReader::read(data, read, error)) { std::cerr << error << '\n'; return 1; } if (read.find("LevelName")->stringOr() != "Survival_01" || read.find("Time")->integerOr() != 42) return 1; return 0; }
