@@ -7,60 +7,83 @@ on:
       - feature/windows-portable-exe
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: update Windows binary')
     runs-on: windows-2022
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Install Qt 6
+      - name: Configure vcpkg
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install aqtinstall
-          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O "$env:GITHUB_WORKSPACE\Qt"
+          Write-Host "VCPKG_INSTALLATION_ROOT=$env:VCPKG_INSTALLATION_ROOT"
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install qtbase:x64-windows zlib:x64-windows sqlite3:x64-windows
 
-      - name: Configure
+      - name: Configure CMake
         shell: pwsh
         run: |
-          $qt = "$env:GITHUB_WORKSPACE\Qt\6.8.3\msvc2022_64"
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$qt" -DSANBUCRAFT_BUILD_TESTS=ON -DSANBUCRAFT_BUILD_GUI=ON
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DSANBUCRAFT_BUILD_TESTS=ON `
+            -DSANBUCRAFT_BUILD_GUI=ON
 
-      - name: Build
+      - name: Build Release
         run: cmake --build build --config Release --parallel
 
       - name: Run tests
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Deploy Qt
+      - name: Deploy Qt runtime
         shell: pwsh
         run: |
-          $qtBin = "$env:GITHUB_WORKSPACE\Qt\6.8.3\msvc2022_64\bin"
-          & "$qtBin\windeployqt.exe" --release --no-translations "$env:GITHUB_WORKSPACE\build\Release\sanbucraft_ai.exe"
-
-      - name: Prepare portable package
-        shell: pwsh
-        run: |
+          $windeploy = Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\tools" -Recurse -Filter windeployqt.exe |
+            Select-Object -First 1
+          if ($null -eq $windeploy) {
+            throw "windeployqt.exe was not found in the vcpkg Qt installation."
+          }
           New-Item -ItemType Directory -Force -Path dist\data | Out-Null
           Copy-Item build\Release\sanbucraft_ai.exe dist\
+          & $windeploy.FullName --release --no-translations dist\sanbucraft_ai.exe
+
+      - name: Copy runtime documentation
+        shell: pwsh
+        run: |
           Copy-Item README.md dist\
           Copy-Item LICENSE dist\
-          Set-Content -Path dist\README_FIRST.txt -Value @'
-SanbuCraft AI - Windows Portable
+          @'
+SanbuCraft AI - Windows x64
 
-Double-click sanbucraft_ai.exe to start.
-The program will open the Minecraft saves folder first. Select a specific world folder containing level.dat.
+Double-click sanbucraft_ai.exe.
 
-The application reads the Minecraft world in read-only mode and does not modify the save.
+The program opens the Minecraft Java saves directory and lets you select a world folder containing level.dat.
 
-Command line:
-  sanbucraft_ai.exe --world "C:\path\to\world"
-  sanbucraft_ai.exe --headless --world "C:\path\to\world"
-'@
+The application reads Minecraft save data in read-only mode.
+'@ | Set-Content dist\README_FIRST.txt -Encoding UTF8
 
-      - name: Archive
+      - name: Commit Windows executable bundle
+        shell: pwsh
+        run: |
+          if (git status --porcelain) {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            New-Item -ItemType Directory -Force -Path builds\windows-x64 | Out-Null
+            Copy-Item dist\* builds\windows-x64\ -Recurse -Force
+            git add builds\windows-x64
+            git commit -m "chore: update Windows binary"
+            git push
+          } else {
+            Write-Host "No bundle changes to commit."
+          }
+
+      - name: Create ZIP
         shell: pwsh
         run: Compress-Archive -Path dist\* -DestinationPath SanbuCraft-AI-Windows-x64.zip -Force
 
