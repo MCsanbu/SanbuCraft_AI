@@ -16,15 +16,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install native dependencies
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install qtbase:x64-windows zlib:x64-windows sqlite3:x64-windows
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install zlib:x64-windows sqlite3:x64-windows
+
+      - name: Install prebuilt Qt
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install aqtinstall
+          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O "$env:GITHUB_WORKSPACE\Qt"
 
       - name: Configure
         shell: pwsh
         run: |
-          cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" -DSANBUCRAFT_BUILD_TESTS=ON -DSANBUCRAFT_BUILD_GUI=ON
+          cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" -DCMAKE_PREFIX_PATH="$env:GITHUB_WORKSPACE\Qt\6.8.3\msvc2022_64" -DSANBUCRAFT_BUILD_TESTS=ON -DSANBUCRAFT_BUILD_GUI=ON
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -37,15 +44,14 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item build\Release\sanbucraft_ai.exe dist\sanbucraft_ai.exe
-          $tool = Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\tools" -Recurse -Filter windeployqt.exe | Select-Object -First 1
-          if ($null -eq $tool) { throw "windeployqt.exe not found" }
-          & $tool.FullName --release --no-translations dist\sanbucraft_ai.exe
+          & "$env:GITHUB_WORKSPACE\Qt\6.8.3\msvc2022_64\bin\windeployqt.exe" --release --no-translations dist\sanbucraft_ai.exe
 
       - name: Verify executable
         shell: pwsh
         run: |
           if (-not (Test-Path dist\sanbucraft_ai.exe)) { throw "Executable was not produced" }
           Get-Item dist\sanbucraft_ai.exe | Format-List FullName,Length
+          if (-not (Test-Path dist\Qt6Widgets.dll)) { throw "Qt6Widgets.dll was not deployed" }
 
       - name: Publish executable to repository
         shell: pwsh
