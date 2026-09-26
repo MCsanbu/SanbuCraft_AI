@@ -19,19 +19,19 @@ jobs:
       - name: Install native dependencies
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install zlib:x64-windows sqlite3:x64-windows
+          & "$env:VCPKG_INSTALLATION_ROOT\\vcpkg.exe" install zlib:x64-windows sqlite3:x64-windows
 
       - name: Install prebuilt Qt
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           python -m pip install aqtinstall
-          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O "$env:GITHUB_WORKSPACE\Qt"
+          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O "$env:GITHUB_WORKSPACE\\Qt"
 
       - name: Configure
         shell: pwsh
         run: |
-          cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" -DCMAKE_PREFIX_PATH="$env:GITHUB_WORKSPACE\Qt\6.8.3\msvc2022_64" -DSANBUCRAFT_BUILD_TESTS=ON -DSANBUCRAFT_BUILD_GUI=ON
+          cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\\scripts\\buildsystems\\vcpkg.cmake" -DCMAKE_PREFIX_PATH="$env:GITHUB_WORKSPACE\\Qt\\6.8.3\\msvc2022_64" -DSANBUCRAFT_BUILD_TESTS=ON -DSANBUCRAFT_BUILD_GUI=ON
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -39,23 +39,54 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Deploy Qt and dependencies
+      - name: Prepare complete portable runtime
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item build\Release\sanbucraft_ai.exe dist\sanbucraft_ai.exe
-          & "$env:GITHUB_WORKSPACE\Qt\6.8.3\msvc2022_64\bin\windeployqt.exe" --release --compiler-runtime --no-translations dist\sanbucraft_ai.exe
-          Copy-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\zlib1.dll" dist\zlib1.dll -Force
-          Copy-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\sqlite3.dll" dist\sqlite3.dll -Force
+          Copy-Item build\\Release\\sanbucraft_ai.exe dist\\sanbucraft_ai.exe
 
-      - name: Publish portable runtime to repository
+          $qtBin = "$env:GITHUB_WORKSPACE\\Qt\\6.8.3\\msvc2022_64\\bin"
+          & "$qtBin\\windeployqt.exe" --release --no-translations dist\\sanbucraft_ai.exe
+
+          Copy-Item "$env:VCPKG_INSTALLATION_ROOT\\installed\\x64-windows\\bin\\z.dll" dist\\z.dll -Force
+          Copy-Item "$env:VCPKG_INSTALLATION_ROOT\\installed\\x64-windows\\bin\\sqlite3.dll" dist\\sqlite3.dll -Force
+
+          $programFilesX86 = [Environment]::GetFolderPath("ProgramFilesX86")
+          $vswhere = "$programFilesX86\\Microsoft Visual Studio\\Installer\\vswhere.exe"
+          if (Test-Path $vswhere) {
+            $vs = & $vswhere -latest -products * -property installationPath
+            if ($vs) {
+              $crtRoots = Get-ChildItem "$vs\\VC\\Redist\\MSVC" -Directory -ErrorAction SilentlyContinue
+              foreach ($crtRoot in $crtRoots) {
+                $crt = Get-ChildItem $crtRoot.FullName -Recurse -File -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -in @("vcruntime140.dll","vcruntime140_1.dll","msvcp140.dll","concrt140.dll") }
+                foreach ($dll in $crt) {
+                  Copy-Item $dll.FullName "dist\\$($dll.Name)" -Force
+                }
+              }
+            }
+          }
+
+          Copy-Item README.md dist\\README.md
+          Copy-Item LICENSE dist\\LICENSE
+
+      - name: Verify runtime
         shell: pwsh
         run: |
-          if (Test-Path builds\windows-x64) {
-            Remove-Item builds\windows-x64 -Recurse -Force
+          $required = @("sanbucraft_ai.exe","Qt6Core.dll","Qt6Gui.dll","Qt6Widgets.dll","z.dll","sqlite3.dll","vcruntime140.dll","vcruntime140_1.dll","msvcp140.dll")
+          foreach ($file in $required) {
+            if (-not (Test-Path "dist\\$file")) { throw "Missing runtime file: $file" }
           }
-          New-Item -ItemType Directory -Force -Path builds\windows-x64 | Out-Null
-          Copy-Item dist\* builds\windows-x64\ -Recurse -Force
+          if (-not (Test-Path "dist\\platforms\\qwindows.dll")) { throw "Missing Qt platform plugin" }
+
+      - name: Publish complete runtime to repository
+        shell: pwsh
+        run: |
+          if (Test-Path builds\\windows-x64) {
+            Remove-Item builds\\windows-x64 -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path builds\\windows-x64 | Out-Null
+          Copy-Item dist\\* builds\\windows-x64\\ -Recurse -Force
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add builds/windows-x64
@@ -67,11 +98,9 @@ jobs:
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          Copy-Item README.md dist\
-          Copy-Item LICENSE dist\
-          Compress-Archive -Path dist\* -DestinationPath SanbuCraft-AI-Windows-x64.zip -Force
+          Compress-Archive -Path dist\\* -DestinationPath SanbuCraft-AI-Windows-x64.zip -Force
 
-      - name: Upload portable ZIP
+      - name: Upload portable package
         uses: actions/upload-artifact@v4
         with:
           name: SanbuCraft-AI-Windows-x64
