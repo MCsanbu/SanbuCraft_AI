@@ -1,0 +1,122 @@
+# SanbuCraft AI
+
+> 一个面向 Minecraft Java Edition 世界存档的可扩展 AI 世界管家。当前仓库提供：配置、NBT、世界/玩家读取、容器扫描、SQLite 持久化和资源统计；不会修改 Minecraft 世界。
+> Made By GPT-5.6-Luna 
+
+## 当前功能
+
+- C++17 / CMake 工程，可在 Windows、Linux 与 macOS 上构建。
+- 分层核心模块：配置（`Config`）与线程安全日志（`Logger`）。
+- 可持久化的本地 `key=value` 配置文件；配置中**不保存** API Key 或 RCON 密码。
+- 最小可运行命令行入口，可接受 Minecraft 世界路径，为后续 `WorldLoader` 保留稳定输入。
+- CTest 覆盖配置读写/非法键与日志等级过滤。
+- NBT reader/writer 支持 Java Edition 常用 tag、Big Endian、gzip/zlib 和未压缩载荷；WorldLoader 读取 `level.dat`，PlayerLoader 读取 `playerdata/*.dat`。
+- Anvil `.mca` 容器扫描支持主世界、下界和末地的 chest、barrel、shulker box、ender chest；扫描结果可进入 SQLite schema（worlds、players、items、containers、container_items、chunks、structures、analysis_results）。
+
+## 最终技术架构
+
+```text
+GUI (Qt, Phase 10)
+       │
+Application/Core: WorldManager · PlayerManager · AnalysisManager
+       │
+Domain: NBT · Region/Chunk · Player · Container · World Analyzer
+       │
+Infrastructure: SQLite repositories · AI providers · RCON/Fabric connection
+```
+
+- **核心层**只依赖抽象与领域模型，不能直接调用 AI、SQLite 或网络代码。
+- **AI 层**将使用 `AIProvider` 抽象，分别实现 OpenAI、Local 与 Mock provider；世界上下文与具体 provider 解耦。
+- **通信层**将通过 `MinecraftConnection` 隔离 RCON/Fabric 等实现；任何写操作必须走确认流程。
+- **数据层**将在 Phase 7 使用 SQLite prepared statements、事务、迁移与增量扫描元数据。
+
+## 规划目录
+
+```text
+src/
+  core/          # 当前：Config、Logger；后续管理器
+  minecraft/     # Phase 2 起：NBT、region、chunk、player、container
+  database/      # Phase 7：SQLite 与 repositories
+  ai/            # Phase 11：provider、prompt、agent
+  network/       # Phase 15：RCON / Fabric adapter
+  gui/           # Phase 10：Qt dashboard、地图与聊天
+tests/           # 每个模块的独立测试
+resources/ data/ docs/
+```
+
+## 环境要求
+
+- CMake 3.20+
+- 支持 C++17 的编译器：MSVC 2022、GCC 9+ 或 Clang 10+
+- zlib（NBT 压缩）与 SQLite3 是当前必需依赖。Qt 6 Widgets 是可选依赖：检测到后会构建桌面 Dashboard；未检测到时仍可构建完整的无界面分析器。
+
+## 构建与运行
+
+### Windows（Visual Studio 2022）
+
+在“x64 Native Tools Command Prompt for VS 2022”中，进入项目根目录后执行：
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Debug
+ctest --test-dir build -C Debug --output-on-failure
+.\build\Debug\sanbucraft_ai.exe --world "C:\Users\<用户名>\AppData\Roaming\.minecraft\saves\Survival_01"
+```
+
+首次运行会创建 `data/sanbucraft.conf` 与 `data/sanbucraft.log`。可用 `--config <路径>` 选择其他本地配置文件；`--log-level debug|info|warning|error` 调整终端日志等级。
+
+### Linux/macOS
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/sanbucraft_ai --world "$HOME/.minecraft/saves/Survival_01"
+```
+
+## Phase 9–10：地图与桌面界面
+
+若 CMake 检测到 Qt 6 Widgets，运行带 `--world` 的程序会打开只读桌面 Dashboard：概览页显示世界、玩家、容器和物资统计，**World Map** 页显示玩家（蓝色）与容器（橙色）标记。地图可使用鼠标滚轮缩放、拖动平移，并通过悬停查看坐标。使用 `--headless` 可强制不启动 GUI，方便服务器、CI 或脚本环境。
+
+在 Windows 上可通过 vcpkg 安装 GUI 依赖：
+
+```powershell
+vcpkg install qtbase:x64-windows
+cmake -S . -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="<vcpkg>\scripts\buildsystems\vcpkg.cmake"
+cmake --build build --config Debug
+```
+
+## Phase 11–16：AI、工具与安全执行边界
+
+当前实现提供可替换的 `AIProvider` 接口、默认离线 `MockAIProvider`、`WorldContext` 以及 `Agent`。Agent 会把真实的世界、玩家、物资与容器数据组合成上下文；对于钻石、铁、金、煤、绿宝石和面包等查询，会直接从已扫描的数据中回答数量和容器坐标。可以在无 GUI 环境中使用：
+
+```bash
+./build/sanbucraft_ai --world "$HOME/.minecraft/saves/Survival_01" --ask "我的钻石在哪里？" --headless
+```
+
+涉及整理、放置、建造、删除或执行的请求只会生成“需要确认”的提议，绝不会发送 Minecraft 命令。`MinecraftConnection` 抽象和 `RconConnection` 已预留，但 RCON 网络传输在密钥安全存储、认证和超时策略完成前保持禁用，避免意外执行操作。
+
+## 配置与安全
+
+`data/sanbucraft.conf` 当前支持世界路径、未来数据库路径、日志路径、AI provider/model 及 RCON 地址/端口。密钥与密码不会被配置接口写出，未来会接入系统凭据存储或运行时环境变量。配置解析拒绝未知键和无效端口，避免静默拼写错误。
+
+## 打包
+
+Release 构建可通过 CPack 生成与平台对应的 ZIP 和 TGZ 包；详细命令、发布门槛及不包含敏感运行时文件的说明见 [`docs/release.md`](docs/release.md)。
+
+## Minecraft 兼容性
+
+面向 Java Edition 的 gzip/zlib NBT、`level.dat`、`playerdata/*.dat` 与 Anvil `.mca`。已实现的容器解析覆盖常见的 `block_entities` 和旧版 `Level.TileEntities` 布局；其他自定义维度、模组容器和跨版本数据变化将继续补充兼容性测试。
+
+## 开发路线
+
+1. **已完成：Phase 1–8 基础实现** — 骨架、NBT、世界/玩家/背包、Anvil 容器、SQLite schema 与资源分析。
+2. **已完成：Phase 9–10 基础实现** — 可缩放/平移的 Chunk 坐标地图和可选 Qt Dashboard。
+3. **已完成：Phase 11–16 安全基础** — 可替换 AI 接口、真实世界上下文、只读查询 Agent、确认式危险操作提案和禁用状态的 RCON 边界。
+4. Phase 17–18 — 经确认的自动化操作、真实 RCON/Fabric 传输、端到端真实世界兼容性夹具、性能优化与打包。
+
+## 常见问题
+
+**程序会修改我的世界吗？** 不会。当前版本完全不读取世界内容，更不会修改存档。未来所有写入操作都将默认要求明确确认。
+
+**为什么没有 API Key 配置？** Phase 1 刻意不处理密钥；绝不会将 API Key 或 RCON 密码硬编码或提交到 Git。
